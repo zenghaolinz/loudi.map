@@ -287,7 +287,7 @@
     ];
 
     // ===========================================
-    // 4. 核心逻辑 (✅ 已修正文件读取逻辑)
+    // 4. 核心逻辑 (✅ 已修正函数名匹配)
     // ===========================================
     const layers = { spots: L.layerGroup().addTo(map), borders: L.layerGroup().addTo(map) };
     let geoData = null;
@@ -301,7 +301,7 @@
         })
         .catch(e => {
             console.error("加载 loudi.json 失败", e);
-            alert("⚠️ 无法加载 'loudi.json' 文件！\n\n请确保：\n1. loudi.json 已上传到 GitHub 仓库。\n2. 文件名全小写。\n3. 如果是本地双击打开，请使用 VS Code Live Server，否则浏览器会拦截读取。");
+            alert("⚠️ 无法加载 'loudi.json' 文件！\n\n请确保：\n1. loudi.json 已上传到 GitHub 仓库（或与 html 在同一目录）。\n2. 文件名全小写。\n3. 如果是本地预览，请使用 VS Code Live Server，浏览器直接打开 file:// 无法读取本地文件。");
         });
 
     window.setMode = function(mode) {
@@ -373,6 +373,8 @@
                     </div>
                     <div class="card-desc">${s.desc}</div>
                 </div>`;
+            
+            // 列表点击事件
             card.onclick = () => {
                 map.flyTo([s.lat, s.lng], 15);
                 m.openPopup();
@@ -393,6 +395,7 @@
     
     window.filterSpots = renderTour;
 
+    // ✅ 修复后的 loadHist 函数
     window.loadHist = function(idx) {
         document.querySelectorAll('.t-btn').forEach((b, i) => b.classList.toggle('active', i===idx));
         const d = historyEras[idx];
@@ -407,8 +410,9 @@
             L.geoJSON(geoData, {
                 style: f => {
                     const n = f.properties.name;
-                    let g = d.groups.find(x => x.m.some(k => n.includes(k)));
-                    if(g) return { color: g.c, weight: 1, fillColor: g.c, fillOpacity: 0.6 };
+                    // 修正点：将 x.m 改为 x.members，将 g.c 改为 g.color
+                    let g = d.groups.find(x => x.members.some(k => n.includes(k)));
+                    if(g) return { color: g.color, weight: 1, fillColor: g.color, fillOpacity: 0.6 };
                     return { opacity: 0, fillOpacity: 0 };
                 }
             }).addTo(layers.borders);
