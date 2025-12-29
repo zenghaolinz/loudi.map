@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>娄底全域 · 智游与溯源</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* ================= 1. 视觉设计系统 ================= */
+        :root {
+            --primary: #2563eb;
+            --accent: #f59e0b;
+            --sidebar-w: 420px;
+            --glass: rgba(255, 255, 255, 0.98);
+        }
+        
+        body { margin: 0; padding: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; display: flex; height: 100vh; overflow: hidden; background: #f1f5f9; }
+        
+        /* 侧边栏 */
+        .sidebar {
+            width: var(--sidebar-w); background: #fff; z-index: 500; display: flex; flex-direction: column;
+            box-shadow: 4px 0 25px rgba(0,0,0,0.05); border-right: 1px solid #e2e8f0;
+        }
+
+        /* 顶部 */
+        .header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; background: #fff; }
+        .title { font-size: 22px; font-weight: 900; color: #0f172a; margin: 0 0 5px 0; letter-spacing: -0.5px; }
+        .subtitle { font-size: 13px; color: #64748b; margin-bottom: 15px; font-weight: 500; letter-spacing: 1px; }
+
+        /* 模式切换 */
+        .tabs { display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .tab { 
+            flex: 1; text-align: center; padding: 10px; font-size: 14px; font-weight: 600; color: #64748b; 
+            cursor: pointer; border-radius: 8px; transition: all 0.2s; 
+        }
+        .tab.active { background: #fff; color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+        /* 内容区 */
+        .content { flex: 1; overflow-y: auto; padding: 20px; background: #f8fafc; }
+        .panel { display: none; animation: fadeIn 0.3s; }
+        .panel.active { display: block; }
+
+        /* 列表卡片 */
+        .spot-card {
+            background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 16px;
+            border: 1px solid #f1f5f9; cursor: pointer; transition: all 0.2s;
+            position: relative; overflow: hidden; display: flex; align-items: flex-start;
+        }
+        .spot-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border-color: var(--primary); }
+        .spot-card.active { border: 2px solid var(--primary); background: #eff6ff; }
+        
+        /* 左侧色条 */
+        .spot-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+        .spot-card[data-area="新化"]::before { background: #8b5cf6; }
+        .spot-card[data-area="双峰"]::before { background: #3b82f6; }
+        .spot-card[data-area="冷水江"]::before { background: #f97316; }
+        .spot-card[data-area="涟源"]::before { background: #10b981; }
+        .spot-card[data-area="娄星"]::before { background: #ef4444; }
+
+        .card-icon { 
+            width: 48px; height: 48px; background: #f1f5f9; border-radius: 12px; 
+            display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 16px; flex-shrink: 0; 
+        }
+        .card-info { flex: 1; }
+        .card-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .card-area { font-size: 11px; padding: 2px 6px; background: #f0f0f0; border-radius: 4px; font-weight: normal; color: #888; }
+        .card-desc { font-size: 13px; color: #475569; line-height: 1.5; }
+
+        /* 筛选器 */
+        .filter-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; }
+        .tag-btn { white-space: nowrap; padding: 5px 12px; border-radius: 20px; font-size: 12px; background: #fff; border: 1px solid #e0e0e0; color: #666; cursor: pointer; }
+        .tag-btn.active { border-color: var(--primary); color: var(--primary); background: #e6f7ff; font-weight: bold; }
+
+        /* 历史面板 */
+        .hist-card { background: #fff7ed; border: 1px solid #ffedd5; border-radius: 16px; padding: 24px; }
+        .hist-h { font-family: "Kaiti", serif; font-size: 26px; font-weight: 900; color: #7c2d12; margin-bottom: 5px; }
+        .hist-sub { color: #c2410c; font-weight: bold; margin-bottom: 20px; }
+        .hist-p { font-size: 15px; line-height: 1.8; color: #431407; text-align: justify; }
+
+        /* 地图 */
+        .map-container { flex: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+
+        /* 底部时间轴 */
+        .timeline-bar {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+            padding: 8px; border-radius: 100px; display: none; gap: 8px;
+            box-shadow: 0 10px 30px -5px rgba(0,0,0,0.2); z-index: 1000;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        .timeline-bar.show { display: flex; }
+        .t-btn {
+            padding: 8px 20px; border-radius: 50px; font-size: 13px; font-weight: 700; color: #64748b;
+            cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+        }
+        .t-btn:hover { background: #f1f5f9; }
+        .t-btn.active { background: #1e293b; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+        /* 弹窗 */
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.3); }
+        .leaflet-popup-content { margin: 0; width: 260px !important; }
+        .pop-head { padding: 15px; color: #fff; font-weight: 800; font-size: 15px; }
+        .pop-body { padding: 15px; font-size: 13px; color: #334155; line-height: 1.6; }
+        .pop-link { display: block; margin-top: 10px; background: #10b981; color: #fff; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-weight: bold; }
+
+        @media (max-width: 768px) { body { flex-direction: column-reverse; } .sidebar { width: 100%; height: 50%; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="header">
+        <div class="title">娄底全域导览</div>
+        <div class="subtitle">湘中明珠 · 蚩尤故里 · 湘军摇篮</div>
+        <div class="tabs">
+            <div class="tab active" onclick="setMode('tour')">🚀 现代景点</div>
+            <div class="tab" onclick="setMode('hist')">📜 历史疆域</div>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div id="view-tour" class="panel active">
+            <div class="filter-row">
+                <div class="tag-btn active" onclick="filterSpots('all', this)">全部</div>
+                <div class="tag-btn" onclick="filterSpots('高校', this)">🎓 高校</div>
+                <div class="tag-btn" onclick="filterSpots('学府', this)">🏫 百年学府</div>
+                <div class="tag-btn" onclick="filterSpots('新化', this)">新化</div>
+                <div class="tag-btn" onclick="filterSpots('双峰', this)">双峰</div>
+                <div class="tag-btn" onclick="filterSpots('冷水江', this)">冷水江</div>
+                <div class="tag-btn" onclick="filterSpots('涟源', this)">涟源</div>
+                <div class="tag-btn" onclick="filterSpots('娄星', this)">娄星</div>
+            </div>
+            <div id="spotList"></div>
+        </div>
+        
+        <div id="view-hist" class="panel">
+            <div class="hist-card">
+                <div class="hist-h" id="h-title"></div>
+                <div class="hist-sub" id="h-era"></div>
+                <div class="hist-p" id="h-desc"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="map-container">
+    <div id="map"></div>
+    <div class="timeline-bar" id="timeline">
+        <div class="t-btn" onclick="loadHist(0)">秦汉</div>
+        <div class="t-btn" onclick="loadHist(1)">宋代</div>
+        <div class="t-btn" onclick="loadHist(2)">清代</div>
+        <div class="t-btn" onclick="loadHist(3)">1969</div>
+        <div class="t-btn" onclick="loadHist(4)">1977</div>
+        <div class="t-btn active" onclick="loadHist(5)">现代</div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // 1. 初始化地图
+    const map = L.map('map', { zoomControl: false }).setView([27.7017, 111.9963], 9);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('http://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        subdomains: ["01", "02", "03", "04"], attribution: '© 高德地图'
+    }).addTo(map);
+
+    // ===========================================
+    // 2. 核心数据
+    // ===========================================
+    const spots = [
+    // --- 🎓 娄底高校 ---
+    { "name": "湖南人文科技学院", "lat": 27.7128, "lng": 112.0064, "area": "娄星", "icon": "🎓", "tags": "高校", "desc": "娄底唯一的公办本科院校，前身是娄底师专。" },
+    { "name": "娄底职业技术学院", "lat": 27.7413, "lng": 112.0217, "area": "娄星", "icon": "🎓", "tags": "高校", "desc": "国家骨干高职院校，位于月塘街。" },
+    { "name": "娄底潇湘职业学院", "lat": 27.7628, "lng": 111.9853, "area": "娄星", "icon": "🎓", "tags": "高校", "desc": "位于娄底经开区，民办高职院校。" },
+    { "name": "娄底幼儿师范专科学校", "lat": 27.6858, "lng": 111.4350, "area": "冷水江", "icon": "🎓", "tags": "高校", "desc": "前身为冷水江师范，培养幼教人才。" },
+
+    // --- 🏫 百年学府 ---
+    { "name": "新化一中", "lat": 27.736226, "lng": 111.317986, "area": "新化", "icon": "🏫", "tags": "学府", "desc": "创办于1898年，原名新化实学堂。" },
+    { "name": "双峰书院 (双峰一中)", "lat": 27.460377, "lng": 112.163784, "area": "双峰", "icon": "🏫", "tags": "学府", "desc": "始于1760年乾隆御批的双峰书院。" },
+    { "name": "涟源一中 (国师旧址)", "lat": 27.6953, "lng": 111.6636, "area": "涟源", "icon": "🏫", "tags": "学府", "desc": "抗战时期“国立师范学院”旧址。" },
+
+    // --- 核心景点 ---
+    { "name": "罗盛教纪念馆", "lat": 27.733984, "lng": 111.309827, "area": "新化", "icon": "🎖️", "desc": "位于新化资江一桥西端北侧，纪念伟大的国际主义战士罗盛教。" },
+    { "name": "新化古城(向东街)", "lat": 27.746193, "lng": 111.308176, "area": "新化", "icon": "🏮", "desc": "资江老码头旁的千年古街，保留了大量明清建筑，是美食聚集地。" },
+    { "name": "北塔公园", "lat": 27.755897, "lng": 111.306781, "area": "新化", "icon": "🗼", "desc": "矗立于资江北岸，古塔凌霄，是新化县城的标志性景观。" },
+    { "name": "狮子山公园", "lat": 27.7325, "lng": 111.3435, "area": "新化", "icon": "🦁", "desc": "位于县城东部，因山形似卧狮而得名，是市民休闲健身的天然氧吧。" },
+    { "name": "紫鹊界梯田", "lat": 27.691577, "lng": 110.968766, "area": "新化", "icon": "🌾", "desc": "全球重要农业文化遗产，两千多年历史的秦汉古梯田，灌溉奇观。" },
+    { "name": "大熊山公园", "lat": 28.1309, "lng": 111.31559, "area": "新化", "icon": "🌲", "desc": "湘中屋脊，蚩尤祖山，拥有广袤的原始次生林。" },
+    { "name": "梅山龙宫", "lat": 27.94995, "lng": 111.29326, "area": "新化", "icon": "🐲", "desc": "亚洲最美溶洞之一，资江畔的地下艺术宫殿。" },
+    { "name": "曾国藩故居", "lat": 27.407134, "lng": 112.459149, "area": "双峰", "icon": "📜", "desc": "荷叶镇富厚堂，中国保存最完好的乡间侯府，家教文化典范。" },
+    { "name": "蔡和森纪念馆", "lat": 27.456683, "lng": 112.202359, "area": "双峰", "icon": "🚩", "desc": "位于双峰县城中心，纪念中国共产党早期领导人蔡和森。" },
+    { "name": "水府庙水库", "lat": 27.706592, "lng": 112.176226, "area": "双峰", "icon": "🌊", "desc": "湘中第一大人工湖，烟波浩渺，景色宜人。" },
+    { "name": "波月洞", "lat": 27.70362, "lng": 111.45722, "area": "冷水江", "icon": "🐒", "desc": "86版《西游记》水帘洞取景地，世界熔岩博物馆。" },
+    { "name": "锡矿山遗址", "lat": 27.754645, "lng": 111.491446, "area": "冷水江", "icon": "⚒️", "desc": "世界锑都，保留了独特的工矿业遗迹和红色记忆。" },
+    { "name": "湄江地质公园", "lat": 27.898575, "lng": 111.74539, "area": "涟源", "icon": "🏞️", "desc": "三湘独秀，十里画廊，典型的喀斯特地貌奇观。" },
+    { "name": "龙山药王谷", "lat": 27.5233, "lng": 111.827, "area": "涟源", "icon": "💊", "desc": "相传药王孙思邈曾在此隐居，高山避暑养生胜地。" },
+    { "name": "石马公园", "lat": 27.735995, "lng": 112.012616, "area": "娄星", "icon": "🐎", "desc": "娄底市中心的老牌公园，因园内有石马雕像而得名。" },
+    { "name": "孙水公园", "lat": 27.694098, "lng": 111.994537, "area": "娄星", "icon": "🌳", "desc": "市政府旁的大型城市公园，被誉为城市绿肺。" },
+    { "name": "三联峒冰泉", "lat": 27.6180, "lng": 111.1650, "area": "新化", "icon": "🧊", "desc": "维山乡，喊泉与玻璃桥。" },
+    { "name": "渠江源茶园", "lat": 27.7328, "lng": 110.8947, "area": "新化", "icon": "🍵", "desc": "奉家镇，黑茶之源。" },
+    { "name": "油溪河漂流", "lat": 27.9618, "lng": 111.2999, "area": "新化", "icon": "🚣", "desc": "中华第一漂，峡谷急流。" },
+    { "name": "峡石古村", "lat": 27.3833, "lng": 112.3740, "area": "双峰", "icon": "🏡", "desc": "明清古建筑群。" },
+    { "name": "九峰山公园", "lat": 27.3702, "lng": 112.3358, "area": "双峰", "icon": "⛰️", "desc": "双峰衡阳交界，登山远眺。" },
+    { "name": "大乘山", "lat": 27.5942, "lng": 111.4255, "area": "冷水江", "icon": "🌄", "desc": "冷江北郊佛教圣地。" },
+    { "name": "资江风光带", "lat": 27.6794, "lng": 111.4358, "area": "冷水江", "icon": "🌉", "desc": "市区沿江风光带。" },
+    { "name": "谢冰莹故居", "lat": 27.6604, "lng": 111.5941, "area": "冷水江", "icon": "✍️", "desc": "女作家谢冰莹故居，铎山镇。" },
+    { "name": "飞水涯瀑布", "lat": 27.5196, "lng": 111.8141, "area": "涟源", "icon": "💧", "desc": "湘中第一瀑，气势磅礴。" },
+    { "name": "白马湖", "lat": 27.75, "lng": 111.6, "area": "涟源", "icon": "⛵", "desc": "水域宽阔，休闲垂钓。" },
+    { "name": "围城故里", "lat": 27.7080, "lng": 111.6718, "area": "涟源", "icon": "🏰", "desc": "钱钟书《围城》背景地蓝田。" },
+    { "name": "仙女寨", "lat": 27.8451, "lng": 111.8161, "area": "娄星", "icon": "🧚", "desc": "万宝镇，登山祈福。" },
+    { "name": "娄底博物馆", "lat": 27.7448, "lng": 112.0353, "area": "娄星", "icon": "🏛️", "desc": "历史文化窗口。" },
+    { "name": "双江水库", "lat": 27.8886, "lng": 111.9639, "area": "娄星", "icon": "🎣", "desc": "北郊水源地，露营好去处。" },
+    { "name": "青山公园", "lat": 27.7522, "lng": 111.9875, "area": "娄星", "icon": "🌳", "desc": "城市社区公园。" }
+];
+
+    // ===========================================
+    // 3. 历史时期配置 (✅ 历史数据已补全)
+    // ===========================================
+    const historyEras = [
+        {
+            year: "秦汉-唐",
+            title: "梅山蛮地 & 湘南县",
+            desc: "秦汉时期，今娄底东部（双峰、涟源等地）属长沙郡<b>湘南县</b>。而西部（新化、冷水江）则是<b>梅山蛮</b>的活动地域，长期处于半独立状态。<br>🗺️ <b>地图：</b>西部为灰色未开发区域，东部为长沙郡管辖的古县。",
+            groups: [
+                { color: "#8c8c8c", members: ["新化县", "冷水江市"] }, 
+                { color: "#d4b16e", members: ["双峰县", "娄星区", "涟源市"] }
+            ],
+            center: [27.70, 111.80], zoom: 9
+        },
+        {
+            year: "宋代 (1072)",
+            title: "开梅山 · 置新化",
+            desc: "宋神宗熙宁五年，章惇开梅山，置<b>新化县</b>。当时的新化县幅员辽阔，包含了今天的冷水江市全境。东部地区则主要属<b>湘乡县</b>（隶属长沙府）。<br>🗺️ <b>地图：</b>紫色区域为古新化县，蓝色区域为古湘乡县。",
+            groups: [
+                { color: "#722ed1", members: ["新化县", "冷水江市"] },
+                { color: "#1890ff", members: ["双峰县", "娄星区", "涟源市"] }
+            ],
+            center: [27.726, 111.326], zoom: 9
+        },
+        {
+            year: "清 (1644)",
+            title: "湘军故里 · 曾国藩",
+            desc: "清代格局延续了宋明体制。东部<b>湘乡县</b>文教昌盛，走出了以曾国藩为首的湘军集团。西部<b>新化县</b>隶属宝庆府（邵阳），民风彪悍。<br>🗺️ <b>地图：</b>双峰等东部三县市仍为一体（湘乡），西部为新化。",
+            groups: [
+                { color: "#722ed1", members: ["新化县", "冷水江市"] },
+                { color: "#1890ff", members: ["双峰县", "娄星区", "涟源市"] }
+            ],
+            center: [27.422, 112.449], zoom: 9
+        },
+        {
+            year: "1969年",
+            title: "世界锑都 · 设市",
+            desc: "1969年，因<b>锡矿山</b>工矿业发展的战略需要，国务院批准从新化县析出<b>冷水江市</b>（县级）。<br>🗺️ <b>地图：</b>橙色区域（冷水江）从紫色区域中独立出来，标志着工矿城市的诞生。",
+            groups: [
+                { color: "#722ed1", members: ["新化县"] },
+                { color: "#fa8c16", members: ["冷水江市"] },
+                { color: "#1890ff", members: ["双峰县", "娄星区", "涟源市"] }
+            ],
+            center: [27.689, 111.433], zoom: 10
+        },
+        {
+            year: "1977年",
+            title: "涟源地区 · 统一",
+            desc: "1977年，国务院批准设立<b>涟源地区</b>，行署驻地在娄底镇（今娄星区）。这是“娄底”作为一个独立地级行政单元的雏形。<br>🗺️ <b>地图：</b>五县市首次行政统一，显示为绿色。",
+            groups: [
+                { color: "#27ae60", members: ["新化县", "冷水江市", "双峰县", "娄星区", "涟源市"] }
+            ],
+            center: [27.70, 111.99], zoom: 9
+        },
+        {
+            year: "1999年-今",
+            title: "现代 · 娄底市",
+            desc: "1999年，娄底撤地设市，原县级娄底市改设为<b>娄星区</b>。形成了现在的“一区两市两县”格局。<br>🗺️ <b>地图：</b>五彩斑斓的现代行政区划。",
+            groups: [
+                { color: "#722ed1", members: ["新化县"] },
+                { color: "#fa8c16", members: ["冷水江市"] },
+                { color: "#10b981", members: ["涟源市"] },
+                { color: "#3b82f6", members: ["双峰县"] },
+                { color: "#ef4444", members: ["娄星区"] }
+            ],
+            center: [27.729, 112.008], zoom: 9
+        }
+    ];
+
+    // ===========================================
+    // 4. 核心逻辑 (✅ 已修正文件读取逻辑)
+    // ===========================================
+    const layers = { spots: L.layerGroup().addTo(map), borders: L.layerGroup().addTo(map) };
+    let geoData = null;
+
+    // 尝试读取本地 loudi.json
+    fetch('loudi.json')
+        .then(r => r.json())
+        .then(d => {
+            geoData = d;
+            setMode('tour');
+        })
+        .catch(e => {
+            console.error("加载 loudi.json 失败", e);
+            alert("⚠️ 无法加载 'loudi.json' 文件！\n\n请确保：\n1. loudi.json 已上传到 GitHub 仓库。\n2. 文件名全小写。\n3. 如果是本地双击打开，请使用 VS Code Live Server，否则浏览器会拦截读取。");
+        });
+
+    window.setMode = function(mode) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        
+        if(mode === 'tour') {
+            document.querySelector('.tab:nth-child(1)').classList.add('active');
+            document.getElementById('view-tour').classList.add('active');
+            document.getElementById('timeline').classList.remove('show');
+            renderTour();
+        } else {
+            document.querySelector('.tab:nth-child(2)').classList.add('active');
+            document.getElementById('view-hist').classList.add('active');
+            document.getElementById('timeline').classList.add('show');
+            loadHist(5);
+        }
+    }
+
+    function renderTour(filter = 'all', btn) {
+        if(btn) {
+            document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        layers.spots.clearLayers();
+        layers.borders.clearLayers();
+        document.getElementById('spotList').innerHTML = '';
+
+        if(geoData) {
+            L.geoJSON(geoData, {
+                style: f => {
+                    const n = f.properties.name;
+                    let c = "#999";
+                    if(n.includes("新化")) c="#8b5cf6";
+                    else if(n.includes("冷水江")) c="#f97316";
+                    else if(n.includes("涟源")) c="#10b981";
+                    else if(n.includes("双峰")) c="#3b82f6";
+                    else if(n.includes("娄星")) c="#ef4444";
+                    return { color: c, weight: 1, fillColor: c, fillOpacity: 0.1 };
+                }
+            }).addTo(layers.borders);
+        }
+
+        spots.forEach(s => {
+            // 筛选逻辑
+            if(filter === '高校' && (!s.tags || !s.tags.includes('高校'))) return;
+            if(filter === '学府' && (!s.tags || !s.tags.includes('学府'))) return;
+            if(filter !== 'all' && filter !== '高校' && filter !== '学府' && s.area.indexOf(filter) === -1) return;
+
+            let c = "#666";
+            if(s.area.includes("新化")) c="#8b5cf6";
+            if(s.area.includes("双峰")) c="#3b82f6";
+            if(s.area.includes("冷水江")) c="#f97316";
+            if(s.area.includes("涟源")) c="#10b981";
+            if(s.area.includes("娄星")) c="#ef4444";
+            
+            // 列表
+            const card = document.createElement('div');
+            card.className = 'spot-card';
+            card.setAttribute('data-area', s.area);
+            
+            card.innerHTML = `
+                <div class="card-icon" style="color:${c}">${s.icon}</div>
+                <div class="card-info">
+                    <div class="card-title">
+                        <span>${s.name}</span>
+                        <span class="card-area" style="color:${c}">${s.area}</span>
+                    </div>
+                    <div class="card-desc">${s.desc}</div>
+                </div>`;
+            card.onclick = () => {
+                map.flyTo([s.lat, s.lng], 15);
+                m.openPopup();
+            };
+            document.getElementById('spotList').appendChild(card);
+
+            // 标记
+            const m = L.marker([s.lat, s.lng], { draggable: false }).addTo(layers.spots);
+            
+            m.bindPopup(`
+                <div class="pop-head" style="background:${c}">${s.name}</div>
+                <div class="pop-body">${s.desc}<a href="https://uri.amap.com/marker?position=${s.lng},${s.lat}&name=${s.name}" target="_blank" class="pop-link" style="background:${c}">🚀 导航去这里</a></div>
+            `);
+        });
+        
+        if(filter === 'all' || filter === '高校' || filter === '学府') map.setView([27.7017, 111.9963], 9);
+    }
+    
+    window.filterSpots = renderTour;
+
+    window.loadHist = function(idx) {
+        document.querySelectorAll('.t-btn').forEach((b, i) => b.classList.toggle('active', i===idx));
+        const d = historyEras[idx];
+        document.getElementById('h-title').innerText = d.title;
+        document.getElementById('h-era').innerText = d.year;
+        document.getElementById('h-desc').innerHTML = d.desc;
+
+        layers.spots.clearLayers();
+        layers.borders.clearLayers();
+
+        if(geoData) {
+            L.geoJSON(geoData, {
+                style: f => {
+                    const n = f.properties.name;
+                    let g = d.groups.find(x => x.m.some(k => n.includes(k)));
+                    if(g) return { color: g.c, weight: 1, fillColor: g.c, fillOpacity: 0.6 };
+                    return { opacity: 0, fillOpacity: 0 };
+                }
+            }).addTo(layers.borders);
+            map.flyTo(d.center, d.zoom);
+        }
+    }
+</script>
+
+</body>
+</html>
